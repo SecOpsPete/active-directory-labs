@@ -206,75 +206,136 @@ By the end of Part 4, Splunk wasn’t just collecting logs — it was surfacing 
 
 ## ✅ Part 5 – Attack & Detect
 
-### Brute Force with Kali
-
-**RDP attack with crowbar:**
-
-    sudo crowbar -b rdp -s 192.168.10.10/32 -u testuser -C passwords.txt
-
-**SMB attack with hydra:**
-
-    hydra -L users.txt -P passwords.txt smb://192.168.10.10 -V -f
-
-**Splunk Detection:**  
-- Burst of 4625 events (failures).  
-- A single 4624 (success).  
-- 4672 if admin privileges assigned.  
+With the environment built and logs flowing into Splunk, I wanted to put it to the test. This stage is where I stopped simply “collecting logs” and began **simulating adversary behavior** against my own AD domain to validate whether my detections could catch it.
 
 ---
 
-### Atomic Red Team (ART)
+### 🔐 Brute Force with Kali
 
-**Install ART:**
+I began with something noisy but classic: brute forcing remote services. From my Kali VM, I targeted the Windows client using both RDP and SMB.  
+
+**RDP brute force (Crowbar):**
+
+    sudo crowbar -b rdp -s 192.168.10.10/32 -u testuser -C passwords.txt
+
+- `-b rdp` → protocol to attack.  
+- `-s 192.168.10.10/32` → the Windows 10 client target.  
+- `-u testuser` → my deliberately weak lab account.  
+- `-C passwords.txt` → supplied wordlist.  
+
+**SMB brute force (Hydra):**
+
+    hydra -L users.txt -P passwords.txt smb://192.168.10.10 -V -f
+
+- `-L users.txt` → list of usernames to test.  
+- `-P passwords.txt` → password wordlist.  
+- `-V` → verbose output.  
+- `-f` → stop when a valid login is found.  
+
+**Expected telemetry in Splunk:**  
+- A burst of **4625 (failed logon)** events for each attempt.  
+- If the password hits, a **4624 (successful logon)** event appears.  
+- If that account has elevated rights, a **4672 (special privileges assigned)** will follow.  
+
+**Why this matters:**  
+This brute-force test generates a high volume of authentication noise, giving me a chance to validate that Splunk searches and alerts built in Part 4 actually trigger on real attack activity. It’s the SOC analyst’s bread and butter: “lots of failures, then one success.”
+
+---
+
+### 🎭 Atomic Red Team (ART)
+
+After brute force, I turned to **Atomic Red Team (ART)** to simulate more targeted, stealthy techniques. ART provides repeatable test cases that map directly to MITRE ATT&CK, so I could measure detections against recognized adversary behaviors.  
+
+**Install ART (PowerShell):**
 
     Set-ExecutionPolicy Bypass -Scope Process -Force
     iwr https://github.com/redcanaryco/atomic-red-team/raw/master/get-atomics.ps1 -UseBasicParsing -OutFile get-atomics.ps1
     .\get-atomics.ps1
 
-**Run tests:**
+This pulled down the framework and made `Invoke-AtomicTest` available on the Windows client.
 
-**T1059.001 – PowerShell Encoded Command**
+---
+
+#### Test 1: T1059.001 – PowerShell Encoded Command
+Simulates an attacker using encoded PowerShell to obfuscate intent.
 
     Invoke-AtomicTest T1059.001 -TestNumbers 1 -Path "C:\AtomicRedTeam"
 
-- Expect: Sysmon EID 1 with `-enc` in command line.
+**Expected logs:**  
+- **Sysmon Event ID 1 (process creation)** showing `powershell.exe` with `-enc` in the command line.  
 
-**T1547.001 – Registry Run Key Persistence**
+---
+
+#### Test 2: T1547.001 – Registry Run Key Persistence
+Simulates persistence via `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 
     Invoke-AtomicTest T1547.001 -TestNumbers 1 -Path "C:\AtomicRedTeam"
 
-- Expect: Sysmon EID 13 (registry modification).
+**Expected logs:**  
+- **Sysmon Event ID 13 (registry modification)** pointing to the `Run` key.  
 
-**T1105 – Ingress Tool Transfer**
+---
+
+#### Test 3: T1105 – Ingress Tool Transfer
+Simulates an attacker pulling down a tool from the internet.
 
     Invoke-AtomicTest T1105 -TestNumbers 1 -Path "C:\AtomicRedTeam"
 
-- Expect: Sysmon EID 11 (file create) + EID 3 (network connection).
+**Expected logs:**  
+- **Sysmon Event ID 11 (file create)** for the dropped file.  
+- **Sysmon Event ID 3 (network connection)** showing the outbound request.  
 
-**Cleanup:**
+---
+
+**Cleanup:**  
+To avoid lingering artifacts, I ran:
 
     Invoke-AtomicTest T1547.001 -TestNumbers 1 -Path "C:\AtomicRedTeam" -Cleanup
 
-### Splunk Detections
+---
 
-**Encoded PowerShell:**
+### 📊 Splunk Detection Queries
+
+To validate these tests, I pivoted into Splunk with SPL searches aligned to each scenario:
+
+**Encoded PowerShell (T1059.001):**
 
     index=endpoint EventCode=1 Image="*\\powershell.exe" CommandLine="*-enc*"
     | table _time, host, User, CommandLine
 
-**Registry persistence:**
+**Registry persistence (T1547.001):**
 
     index=endpoint EventCode=13
     | regex TargetObject="(?i)\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
     | table _time, host, TargetObject, Details
 
-**File drop + network connection:**
+**File drop + network connection (T1105):**
 
     index=endpoint (EventCode=11 OR EventCode=3)
     | table _time, host, EventCode, Image, CommandLine, TargetFilename, DestinationIp, DestinationPort
 
-**Why this matters:**  
-Now I wasn’t just building infrastructure — I was simulating adversaries and catching them in Splunk. This completed the defender feedback loop.
+---
+
+### 🧠 Why this matters
+
+Part 5 transformed the lab from *log collection* to a true **defender feedback loop**:  
+1. I simulated real-world adversary behavior (brute force, obfuscated PowerShell, persistence, and tool transfer).  
+2. My Sysmon + Splunk pipeline captured the artifacts.  
+3. Custom SPL queries surfaced those behaviors clearly in dashboards and alerts.  
+
+This gave me confidence that if a similar attack played out in production, the right telemetry and detection logic would be there to catch it.
+
+---
+
+### 📌 MITRE ATT&CK Mapping
+
+| Technique ID | Name                               | Category       | Test Description                          |
+|--------------|------------------------------------|----------------|-------------------------------------------|
+| **T1110**    | Brute Force                        | Credential Access | Kali Crowbar/Hydra attacks against RDP & SMB |
+| **T1059.001**| PowerShell (Encoded Command)       | Execution      | Encoded PowerShell to obfuscate commands   |
+| **T1547.001**| Registry Run Keys / Startup Folder | Persistence    | Registry modification for logon persistence |
+| **T1105**    | Ingress Tool Transfer              | Command & Control | Downloading tools/files from remote sources |
+
 
 ---
 
