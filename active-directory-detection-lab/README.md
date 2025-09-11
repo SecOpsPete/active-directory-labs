@@ -59,7 +59,13 @@ I began by defining the environment and requirements:
 Upfront planning avoids confusion later. With static IPs and a clear design, Splunk correlation becomes easier and my detections remain consistent.
 
 <img src="./images/Lab_Diagram.png" alt="Active Directory Lab Diagram" width="70%">
+<br>
 
+### 🔑 Why Active Directory Is Central to This Lab
+
+Active Directory is the backbone of this entire project. It’s where user accounts and groups live, how permissions are decided, and how policies are enforced across the environment. Every logon attempt, privilege check, and security policy begins with AD.  
+
+That makes AD both the **target** attackers go after and the **source** of the signals defenders rely on. By building my lab around AD, I created a realistic enterprise core — the place where identity, access, and security controls all intersect.
 
 ---
 
