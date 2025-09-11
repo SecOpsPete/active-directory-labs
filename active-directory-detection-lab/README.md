@@ -58,6 +58,9 @@ I began by defining the environment and requirements:
 **Why this matters:**  
 Upfront planning avoids confusion later. With static IPs and a clear design, Splunk correlation becomes easier and my detections remain consistent.
 
+<img src="./images/Lab_Diagram.png" alt="Active Directory Lab Diagram" width="70%">
+
+
 ---
 
 ## ✅ Part 2 – Building the Environment
