@@ -129,6 +129,7 @@ At this stage, I had a functioning enterprise-like network: a domain, a workstat
     index = endpoint  
     disabled = false  
     renderXml = true  
+    source = XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
 
 Restarted the SplunkForwarder service to apply changes.
 
