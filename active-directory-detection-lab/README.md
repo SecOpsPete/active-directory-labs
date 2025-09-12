@@ -204,16 +204,6 @@ Expected sources included:
 
 ---
 
-### Dashboards & Alerts
-I built a dashboard with panels for failed logons, suspicious PowerShell, and file drops in Temp/AppData.  
-I also set an alert: **“Brute Force Succeeded”** — triggered when failures are followed by a success within 15 minutes.  
-
-**Analyst Insight:**  
-By the end of Part 4, Splunk wasn’t just collecting logs — it was surfacing meaningful detections tied back to specific users and accounts I had configured in AD.
-
-
----
-
 ## ✅ Part 5 – Attack & Detect
 
 ### 🕵️ Attacker Assumptions in This Lab
