@@ -55,7 +55,7 @@ I began by defining the environment and requirements:
   - SPLUNK → 192.168.10.20  
   - KALI → 192.168.10.30  
 
-**Why this matters:**  
+**Note:**  
 Upfront planning avoids confusion later. With static IPs and a clear design, Splunk correlation becomes easier and my detections remain consistent.
 
 <img src="./images/Lab_Diagram.png" alt="Active Directory Lab Diagram" width="70%">
@@ -132,7 +132,7 @@ At this stage, I had a functioning enterprise-like network: a domain, a workstat
 
 Restarted the SplunkForwarder service to apply changes.
 
-**Why this matters:**  
+**Perspective:**  
 Telemetry is everything. Without Sysmon + Security logs flowing into Splunk, there’s nothing to analyze or detect. This step was about wiring my environment so Splunk could “see.”
 
 ---
@@ -150,7 +150,7 @@ Before wiring logs into Splunk, I needed realistic users and groups in AD so my 
   - `SecOps-Lab-Users` — standard users.  
   - `SecOps-Remote-Desktop` — added to the client’s **Remote Desktop Users** local group so I could RDP without full admin rights.  
 
-**Why this matters:**  
+**Note:**  
 Creating distinct accounts and assigning RDP rights by group ensures Splunk logs show the *who* and *how* behind logon events. It also mirrors real enterprises where access is role-based, not just handed out via local admin.
 
 ---
@@ -207,7 +207,7 @@ Expected sources included:
 I built a dashboard with panels for failed logons, suspicious PowerShell, and file drops in Temp/AppData.  
 I also set an alert: **“Brute Force Succeeded”** — triggered when failures are followed by a success within 15 minutes.  
 
-**Why this matters:**  
+**Analyst Insight:**  
 By the end of Part 4, Splunk wasn’t just collecting logs — it was surfacing meaningful detections tied back to specific users and accounts I had configured in AD.
 
 
@@ -215,7 +215,18 @@ By the end of Part 4, Splunk wasn’t just collecting logs — it was surfacing 
 
 ## ✅ Part 5 – Attack & Detect
 
-With the environment built and logs flowing into Splunk, I wanted to put it to the test. This stage is where I stopped simply “collecting logs” and began **simulating adversary behavior** against my own AD domain to validate whether my detections could catch it.
+### 🕵️ Attacker Assumptions in This Lab
+
+To ground the attack phase, I documented the assumptions that mirror a realistic adversary scenario:
+
+- Attacker has already **gained a foothold in the internal network** (phished user, rogue device, Wi-Fi access).  
+- Attacker has an **IP address** on the subnet, either via DHCP or static assignment.  
+- DHCP in AD environments typically points clients to the **Domain Controller for DNS**, so the attacker also inherits the DC’s DNS server.  
+- RDP has been **enabled on the Windows client** to allow simulation of lateral movement.  
+- Brute force tools like **Crowbar** are used internally against domain-joined hosts, generating authentication noise that can be detected in Splunk.
+
+**Relevance:**  
+This lab simulates *post-compromise lateral movement*, not an internet-exposed RDP attack. The focus is on how telemetry (Security logs, Sysmon, Splunk) captures brute force attempts and successful logons inside an enterprise-like environment.
 
 ---
 
@@ -246,7 +257,7 @@ I began with something noisy but classic: brute forcing remote services. From my
 - If the password hits, a **4624 (successful logon)** event appears.  
 - If that account has elevated rights, a **4672 (special privileges assigned)** will follow.  
 
-**Why this matters:**  
+**Practical Impact:**  
 This brute-force test generates a high volume of authentication noise, giving me a chance to validate that Splunk searches and alerts built in Part 4 actually trigger on real attack activity. It’s the SOC analyst’s bread and butter: “lots of failures, then one success.”
 
 ---
@@ -325,7 +336,7 @@ To validate these tests, I pivoted into Splunk with SPL searches aligned to each
 
 ---
 
-### 🧠 Why this matters
+### 🧠 Key Takeaways
 
 Part 5 transformed the lab from *log collection* to a true **defender feedback loop**:  
 1. I simulated real-world adversary behavior (brute force, obfuscated PowerShell, persistence, and tool transfer).  
