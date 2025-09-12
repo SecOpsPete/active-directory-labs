@@ -396,13 +396,13 @@ This gave me confidence that if a similar attack played out in production, the r
 
 ### 📌 MITRE ATT&CK Mapping
 
-| Technique ID | Name                               | Category       | Test Description                          |
-|--------------|------------------------------------|----------------|-------------------------------------------|
-| **T1110**    | Brute Force                        | Credential Access | Kali Crowbar/Hydra attacks against RDP & SMB |
-| **T1059.001**| PowerShell (Encoded Command)       | Execution      | Encoded PowerShell to obfuscate commands   |
-| **T1547.001**| Registry Run Keys / Startup Folder | Persistence    | Registry modification for logon persistence |
-| **T1105**    | Ingress Tool Transfer              | Command & Control | Downloading tools/files from remote sources |
-
+| Technique ID | Name                               | Category          | Test Description                              |
+|--------------|------------------------------------|-------------------|-----------------------------------------------|
+| **T1110**    | Brute Force                        | Credential Access | Kali Crowbar/Hydra attacks against RDP & SMB  |
+| **T1059.001**| PowerShell (Encoded Command)       | Execution         | Encoded PowerShell to obfuscate commands      |
+| **T1547.001**| Registry Run Keys / Startup Folder | Persistence       | Registry modification for logon persistence   |
+| **T1105**    | Ingress Tool Transfer              | Command & Control | Downloading tools/files from remote sources   |
+| **T1136.001**| Create Account: Local Account      | Persistence       | Adding a new local user account for persistence |
 
 ---
 
