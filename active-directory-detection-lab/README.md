@@ -133,7 +133,7 @@ At this stage, I had a functioning enterprise-like network: a domain, a workstat
 
 Restarted the SplunkForwarder service to apply changes.
 
-**Perspective:**  
+**Note:**  
 Telemetry is everything. Without Sysmon + Security logs flowing into Splunk, there’s nothing to analyze or detect. This step was about wiring my environment so Splunk could “see.”
 
 ---
