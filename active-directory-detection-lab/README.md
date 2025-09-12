@@ -265,53 +265,109 @@ This brute-force test generates a high volume of authentication noise, giving me
 
 ### 🎭 Atomic Red Team (ART)
 
+## ⚔️ Atomic Red Team Simulation
+
 After brute force, I turned to **Atomic Red Team (ART)** to simulate more targeted, stealthy techniques. ART provides repeatable test cases that map directly to MITRE ATT&CK, so I could measure detections against recognized adversary behaviors.  
 
-**Install ART (PowerShell):**
+---
 
-    Set-ExecutionPolicy Bypass -Scope Process -Force
-    iwr https://github.com/redcanaryco/atomic-red-team/raw/master/get-atomics.ps1 -UseBasicParsing -OutFile get-atomics.ps1
-    .\get-atomics.ps1
+### 🔧 Setup and Fixes
 
-This pulled down the framework and made `Invoke-AtomicTest` available on the Windows client.
+The published `get-atomics.ps1` bootstrap script isn’t always enough to make ART usable.  
+In my case I had to do the following:
+
+1. **Clone / Install Atomic Red Team repo**  
+   ART lives under `C:\AtomicRedTeam\`. It has two important folders:
+   - `\invoke-atomicredteam` → PowerShell module (`Invoke-AtomicRedTeam.psm1`)
+   - `\atomics` → YAML definitions for each test
+
+2. **Import the PowerShell module**  
+   Without this, PowerShell didn’t recognize `Invoke-AtomicTest`.  
+
+       Import-Module "C:\AtomicRedTeam\invoke-atomicredteam\Invoke-AtomicRedTeam.psm1" -Force
+
+3. **Fix missing Execution Logger**  
+   By default, ART tries to log with `Default-ExecutionLogger`, but that module isn’t on the system path. I had to manually import it from the repo’s *Public* folder:
+
+       Import-Module "C:\AtomicRedTeam\invoke-atomicredteam\Public\Default-ExecutionLogger.psm1" -Force
+
+   Alternatively, to skip logger errors entirely:
+
+       Invoke-AtomicTest Txxxx -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -NoExecutionLog
+
+4. **Point to the Atomics folder**  
+   Every run must specify where the YAML test definitions live:
+
+       -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
 
 ---
 
-#### Test 1: T1059.001 – PowerShell Encoded Command
-Simulates an attacker using encoded PowerShell to obfuscate intent.
+### 🧪 Tests Run
 
-    Invoke-AtomicTest T1059.001 -TestNumbers 1 -Path "C:\AtomicRedTeam"
+#### Test 1: T1136.001 – Create Local Account (NewLocalUser)
+
+Simulates an attacker creating and adding a new account to the Administrators group.  
+
+       Invoke-AtomicTest T1136.001 -TestNumbers 9 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+
+**Observed behavior:**  
+- User `NewLocalUser` created, added to Administrators, then deleted (per script).  
 
 **Expected logs:**  
-- **Sysmon Event ID 1 (process creation)** showing `powershell.exe` with `-enc` in the command line.  
+- **Security 4720** (user account created)  
+- **Security 4732** (added to Administrators group)  
+- **Security 4726** (user account deleted)  
+- **Sysmon Event ID 1 / Security 4688** showing `net.exe` and `powershell.exe` process creation  
 
 ---
 
-#### Test 2: T1547.001 – Registry Run Key Persistence
-Simulates persistence via `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+#### Test 2: T1059.001 – PowerShell Encoded Command
 
-    Invoke-AtomicTest T1547.001 -TestNumbers 1 -Path "C:\AtomicRedTeam"
+Simulates obfuscated PowerShell via `-enc`.  
+
+       Invoke-AtomicTest T1059.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
 
 **Expected logs:**  
-- **Sysmon Event ID 13 (registry modification)** pointing to the `Run` key.  
+- **Sysmon Event ID 1 (process creation)** → `powershell.exe -enc …`  
 
 ---
 
-#### Test 3: T1105 – Ingress Tool Transfer
-Simulates an attacker pulling down a tool from the internet.
+#### Test 3: T1547.001 – Registry Run Key Persistence
 
-    Invoke-AtomicTest T1105 -TestNumbers 1 -Path "C:\AtomicRedTeam"
+Simulates persistence through `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.  
+
+       Invoke-AtomicTest T1547.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
 
 **Expected logs:**  
-- **Sysmon Event ID 11 (file create)** for the dropped file.  
-- **Sysmon Event ID 3 (network connection)** showing the outbound request.  
+- **Sysmon Event ID 13 (registry modification)** → Run key update  
 
 ---
 
-**Cleanup:**  
-To avoid lingering artifacts, I ran:
+#### Test 4: T1105 – Ingress Tool Transfer
 
-    Invoke-AtomicTest T1547.001 -TestNumbers 1 -Path "C:\AtomicRedTeam" -Cleanup
+Simulates downloading a file from the internet.  
+
+       Invoke-AtomicTest T1105 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+
+**Expected logs:**  
+- **Sysmon Event ID 11 (file created)** for dropped file  
+- **Sysmon Event ID 3 (network connection)** for outbound request  
+
+---
+
+### 🧹 Cleanup
+
+To remove persistence artifacts or test accounts after running:
+
+       # Example cleanup for the registry test
+       Invoke-AtomicTest T1547.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -Cleanup
+
+       # Generic cleanup (user accounts, files, registry keys) for T1136.001
+       Invoke-AtomicTest T1136.001 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -Cleanup
+
+---
+
+✅ With the fixes during installation and configuration, ART tests ran correctly and produced the expected telemetry for Splunk/Sysmon validation.  
 
 ---
 
