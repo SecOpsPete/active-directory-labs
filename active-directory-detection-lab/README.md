@@ -1,4 +1,4 @@
-# 🏗️ Active Directory Lab
+# 🏗️ Active Directory Detection Lab
 
 **Analyst:** Peter Van Rossum  
 **Date Range Built:** September 2025  
