@@ -7,7 +7,6 @@
 
 ⚡This Active Directory Lab walkthrough is based on the excellent [MyDFIR "Active Directory Project (Home Lab)" YouTube series](https://www.youtube.com/@MyDFIR), with additional notes, detections, and explanations written from my own build process.
 
-
 ---
 
 ## ⚠️ Limitations & Considerations
@@ -98,53 +97,147 @@ At this stage, I had a functioning enterprise-like network: a domain, a workstat
 
 ## ✅ Part 3 – Active Directory & Telemetry
 
-### AD Configuration
-- Created user accounts, including a weak “testuser” account.  
-- Applied GPOs:  
-  - Password complexity.  
-  - Audit policy for logon and process creation.  
-  - Enabled Remote Desktop for RDP attack simulations.  
+This part of the lab focused on wiring up my environment so that Splunk could actually “see” activity across the domain controller and client host. It included creating test accounts, applying security policies, deploying Sysmon with a hardened configuration, and forwarding all relevant logs with the Splunk Universal Forwarder (UF).
 
-### Sysmon Deployment
-- Installed Sysmon on DC01 and WIN10-CLIENT.  
-- Used SwiftOnSecurity’s Sysmon configuration for comprehensive telemetry.  
+---
 
-### Splunk Universal Forwarder
-- Installed Splunk UF on both Windows hosts.  
-- Configured `inputs.conf` to forward critical logs:
+### 🛠️ AD Configuration
 
-    [WinEventLog://Application]  
-    index = endpoint  
-    disabled = false  
+1. **Created User Accounts**
+   - Added multiple test accounts to simulate realistic scenarios.
+   - Included a deliberately weak account (`testuser`) for attack simulation.
+   - Accounts were created using the **Active Directory Users and Computers (ADUC) GUI**  
+     *(Right-click Users → New → User, fill in details, finish wizard).*
 
-    [WinEventLog://Security]  
-    index = endpoint  
-    disabled = false  
 
-    [WinEventLog://System]  
-    index = endpoint  
-    disabled = false  
+2. **Applied GPOs**
+   - **Password Complexity:** Enabled complexity requirements (minimum length, upper/lowercase, numbers, special chars).  
+     Path:  
+     `Computer Configuration → Policies → Windows Settings → Security Settings → Account Policies → Password Policy`
+   - **Audit Policy:** Enabled advanced auditing for:
+     - Logon/Logoff (success/failure).
+     - Process Creation (with command-line logging).
+     - Object Access.  
+     Path:  
+     `Computer Configuration → Policies → Windows Settings → Security Settings → Advanced Audit Policy Configuration`
+   - **Remote Desktop:** Enabled RDP for brute force and lateral movement testing.  
+     Path:  
+     `Computer Configuration → Policies → Administrative Templates → Windows Components → Remote Desktop Services → Remote Desktop Session Host → Connections`
 
-    [WinEventLog://Microsoft-Windows-Sysmon/Operational]  
-    index = endpoint  
-    disabled = false  
-    renderXml = true  
-    source = XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+---
 
-Restarted the SplunkForwarder service to apply changes.
+### 🔍 Sysmon Deployment
 
-**Note:**  
-Telemetry is everything. Without Sysmon + Security logs flowing into Splunk, there’s nothing to analyze or detect. This step was about wiring my environment so Splunk could “see.”
+Sysmon (System Monitor) captures detailed endpoint telemetry beyond native logs. I deployed it using **SwiftOnSecurity’s community Sysmon configuration**, which is tuned to reduce noise while still catching adversary techniques.
+
+1. **Download Sysmon**
+   - From Microsoft Sysinternals:  
+     [https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon](https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon)
+
+2. **Download SwiftOnSecurity Sysmon Config**
+   - From GitHub:  
+     [https://github.com/SwiftOnSecurity/sysmon-config](https://github.com/SwiftOnSecurity/sysmon-config)
+
+3. **Install Sysmon with Config**
+   ```powershell
+   sysmon64.exe -i sysmonconfig-export.xml
+   ```
+   - `-i` installs Sysmon as a service.
+   - The XML file defines which events are logged (process creation, network connections, registry writes, etc.).
+
+4. **Verify Installation**
+   ```powershell
+   Get-Service -Name Sysmon64
+   ```
+
+5. **Event Log Location**
+   - Events appear under:  
+     `Applications and Services Logs → Microsoft → Windows → Sysmon → Operational`
+
+**Why Sysmon?**  
+- Windows Security and System logs are limited.  
+- Sysmon provides:
+  - Process creation with command-line arguments.
+  - Parent/child process relationships.
+  - File hash logging.
+  - Network connection logging.  
+- These are critical for detecting persistence, credential dumping, and lateral movement.
+
+---
+
+### 📡 Splunk Universal Forwarder (UF)
+
+The UF forwards logs from Windows hosts into Splunk for indexing and search.
+
+1. **Install UF**
+   - Download: [https://www.splunk.com/en_us/download/universal-forwarder.html](https://www.splunk.com/en_us/download/universal-forwarder.html)
+   - Example silent install:
+     ```powershell
+     msiexec.exe /i splunkforwarder.msi AGREETOLICENSE=Yes RECEIVING_INDEXER="192.168.50.3:9997" /quiet
+     ```
+   - Replace `192.168.50.3` with your Splunk indexer IP and `9997` with your listener port.
+
+2. **Configure inputs.conf**
+   - Location:  
+     `C:\Program Files\SplunkUniversalForwarder\etc\system\local\inputs.conf`
+   - Configuration:
+     ```ini
+     [WinEventLog://Application]
+     index = endpoint
+     disabled = false
+
+     [WinEventLog://Security]
+     index = endpoint
+     disabled = false
+
+     [WinEventLog://System]
+     index = endpoint
+     disabled = false
+
+     [WinEventLog://Microsoft-Windows-Sysmon/Operational]
+     index = endpoint
+     disabled = false
+     renderXml = true
+     source = XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+     ```
+
+   - Key Notes:
+     - `index = endpoint` ensures logs land in the correct index.
+     - `renderXml = true` forwards detailed XML fields from Sysmon.
+
+3. **Restart UF Service**
+   ```powershell
+   net stop SplunkForwarder
+   net start SplunkForwarder
+   ```
+
+4. **Verify Forwarding**
+   - On the Splunk indexer:
+     ```spl
+     index=endpoint host=WIN10-CLIENT OR host=DC01
+     ```
+   - Confirm Security, Application, System, and Sysmon logs appear.
+
+---
+
+### ⚡ Why This Step is Critical
+
+Telemetry is the lifeblood of detection engineering. Without it, Splunk has no visibility.  
+- **Security Logs** capture logon activity, policy changes, and privilege use.  
+- **Sysmon Logs** capture the “how” of process behavior, file manipulation, and attacker tradecraft.  
+- **Splunk UF** is the transport that ensures those logs reach Splunk for correlation and detection.  
+
+Together, they form the foundation of a usable detection lab environment.
 
 ---
 
 ## ✅ Part 4 – Splunk Setup & Detection Engineering
 
 ### AD User Accounts & Permissions
-Before wiring logs into Splunk, I needed realistic users and groups in AD so my detections had meaningful context.
+Building on Part 3, I assigned roles to my test accounts and groups so Splunk detections had context:
 
 - **Users:**  
-  - `testuser` — weak password, used only for brute-force tests.  
+  - `testuser` — weak password account from Part 3, used only for brute-force tests.  
   - `analyst.peter` — everyday non-admin account.  
 
 - **Groups:**  
@@ -152,7 +245,7 @@ Before wiring logs into Splunk, I needed realistic users and groups in AD so my 
   - `SecOps-Remote-Desktop` — added to the client’s **Remote Desktop Users** local group so I could RDP without full admin rights.  
 
 **Note:**  
-Creating distinct accounts and assigning RDP rights by group ensures Splunk logs show the *who* and *how* behind logon events. It also mirrors real enterprises where access is role-based, not just handed out via local admin.
+Creating distinct accounts and assigning RDP rights by group ensures Splunk logs show the *who* and *how* behind logon events. It also mirrors real enterprises where access is role-based.
 
 ---
 
@@ -162,15 +255,13 @@ On the Splunk server, I created a dedicated index:
 - **Index Name:** `endpoint`  
 - **Data Type:** Events  
 
-I verified events were flowing with:
+I verified ingestion with:
 
-    index=endpoint | stats count by host, source
+```spl
+index=endpoint | stats count by host, source
+```
 
-Expected sources included:  
-- `WinEventLog:Security`  
-- `WinEventLog:System`  
-- `WinEventLog:Application`  
-- `WinEventLog:Microsoft-Windows-Sysmon/Operational`  
+Expected sources included: `WinEventLog:Security`, `WinEventLog:System`, `WinEventLog:Application`, and `WinEventLog:Microsoft-Windows-Sysmon/Operational`.
 
 ---
 
@@ -185,22 +276,28 @@ Expected sources included:
 
 **Failed logons by user/IP:**
 
-    index=endpoint source="WinEventLog:Security" EventCode=4625
-    | stats count BY TargetUserName, IpAddress
-    | sort - count
+```spl
+index=endpoint source="WinEventLog:Security" EventCode=4625
+| stats count BY TargetUserName, IpAddress
+| sort - count
+```
 
 **Brute-force success correlation:**
 
-    index=endpoint source="WinEventLog:Security" EventCode IN (4625,4624)
-    | eval outcome=if(EventCode=4625,"fail","success")
-    | stats count AS attempts, values(outcome) AS outcomes by TargetUserName, IpAddress
-    | where attempts>=10 AND mvfind(outcomes,"success")>=0
+```spl
+index=endpoint source="WinEventLog:Security" EventCode IN (4625,4624)
+| eval outcome=if(EventCode=4625,"fail","success")
+| stats count AS attempts, values(outcome) AS outcomes by TargetUserName, IpAddress
+| where attempts>=10 AND mvfind(outcomes,"success")>=0
+```
 
 **Suspicious PowerShell activity:**
 
-    index=endpoint source="WinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1 Image="*\\powershell.exe"
-    | eval encoded=if(match(CommandLine,"(?i)-enc"),"Base64_Encoded","Plain")
-    | table _time, host, User, CommandLine, encoded
+```spl
+index=endpoint source="WinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1 Image="*\\powershell.exe"
+| eval encoded=if(match(CommandLine,"(?i)-enc"),"Base64_Encoded","Plain")
+| table _time, host, User, CommandLine, encoded
+```
 
 ---
 
@@ -208,7 +305,7 @@ Expected sources included:
 
 ### 🕵️ Attacker Assumptions in This Lab
 
-To ground the attack phase, I documented the assumptions that mirror a realistic adversary scenario:
+To ground the attack phase, I documented assumptions that mirror a realistic adversary scenario:
 
 - Attacker has already **gained a foothold in the internal network** (phished user, rogue device, Wi-Fi access).  
 - Attacker has an **IP address** on the subnet, either via DHCP or static assignment.  
@@ -227,21 +324,15 @@ I began with something noisy but classic: brute forcing remote services. From my
 
 **RDP brute force (Crowbar):**
 
-    sudo crowbar -b rdp -s 192.168.10.10/32 -u testuser -C passwords.txt
-
-- `-b rdp` → protocol to attack.  
-- `-s 192.168.10.10/32` → the Windows 10 client target.  
-- `-u testuser` → my deliberately weak lab account.  
-- `-C passwords.txt` → supplied wordlist.  
+```bash
+sudo crowbar -b rdp -s 192.168.10.10/32 -u testuser -C passwords.txt
+```
 
 **SMB brute force (Hydra):**
 
-    hydra -L users.txt -P passwords.txt smb://192.168.10.10 -V -f
-
-- `-L users.txt` → list of usernames to test.  
-- `-P passwords.txt` → password wordlist.  
-- `-V` → verbose output.  
-- `-f` → stop when a valid login is found.  
+```bash
+hydra -L users.txt -P passwords.txt smb://192.168.10.10 -V -f
+```
 
 **Expected telemetry in Splunk:**  
 - A burst of **4625 (failed logon)** events for each attempt.  
@@ -249,144 +340,104 @@ I began with something noisy but classic: brute forcing remote services. From my
 - If that account has elevated rights, a **4672 (special privileges assigned)** will follow.  
 
 **Troubleshooting Notes:**  
-In practice, I wasn’t able to get the brute force from Kali working as intended. The exact cause was never identified, but the failure appeared related to how my virtual lab environment was handling remote authentication attempts. To troubleshoot, I confirmed the RDP and SMB services were enabled, tweaked RDP service settings on the Windows client, rebooted both machines multiple times, and switched network adapter settings in VirtualBox. I also verified account status and tested the tools (Crowbar/Hydra) against local services to ensure they were functional. I eventually narrowed the problem down to the RDP handshake or connection dropping at a certain stage of the authentication process, but the silent failure behavior of Crowbar made it difficult to confirm. Despite these steps, the remote brute force never succeeded. To keep the lab moving, I pivoted to using **Atomic Red Team (ART)** directly on the Windows client to simulate brute-force activity and generate the same authentication telemetry that would appear during a real attack.
+The brute force from Kali didn’t succeed in my environment. After verifying services, tweaking RDP settings, rebooting, and adjusting networking, I narrowed it to a handshake issue with Crowbar. To keep the lab moving, I pivoted to **Atomic Red Team (ART)** directly on the Windows client to simulate brute-force activity and generate the same authentication telemetry.
 
 ---
 
-### 🎭 Atomic Red Team (ART)
-
 ## ⚔️ Atomic Red Team Simulation
 
-After brute force, I turned to **Atomic Red Team (ART)** to simulate more targeted, stealthy techniques. ART provides repeatable test cases that map directly to MITRE ATT&CK, so I could measure detections against recognized adversary behaviors.  
+After brute force, I turned to **Atomic Red Team (ART)** to simulate more targeted techniques. ART provides repeatable test cases that map directly to MITRE ATT&CK.
 
 ---
 
 ### 🔧 Setup and Fixes
 
-The published `get-atomics.ps1` bootstrap script isn’t always enough to make ART usable.  
-In my case I had to do the following:
-
 1. **Clone / Install Atomic Red Team repo**  
-   ART lives under `C:\AtomicRedTeam\`. It has two important folders:
-   - `\invoke-atomicredteam` → PowerShell module (`Invoke-AtomicRedTeam.psm1`)
-   - `\atomics` → YAML definitions for each test
-
+   ART lives under `C:\AtomicRedTeam\`.  
 2. **Import the PowerShell module**  
-   Without this, PowerShell didn’t recognize `Invoke-AtomicTest`.  
-
-       Import-Module "C:\AtomicRedTeam\invoke-atomicredteam\Invoke-AtomicRedTeam.psm1" -Force
-
+   ```powershell
+   Import-Module "C:\AtomicRedTeam\invoke-atomicredteam\Invoke-AtomicRedTeam.psm1" -Force
+   ```
 3. **Fix missing Execution Logger**  
-   By default, ART tries to log with `Default-ExecutionLogger`, but that module isn’t on the system path. I had to manually import it from the repo’s *Public* folder:
-
-       Import-Module "C:\AtomicRedTeam\invoke-atomicredteam\Public\Default-ExecutionLogger.psm1" -Force
-
-   Alternatively, to skip logger errors entirely:
-
-       Invoke-AtomicTest Txxxx -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -NoExecutionLog
-
-4. **Point to the Atomics folder**  
-   Every run must specify where the YAML test definitions live:
-
-       -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+   ```powershell
+   Import-Module "C:\AtomicRedTeam\invoke-atomicredteam\Public\Default-ExecutionLogger.psm1" -Force
+   ```
+   Or skip with:  
+   ```powershell
+   Invoke-AtomicTest Txxxx -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -NoExecutionLog
+   ```
+4. **Point to Atomics folder**  
+   ```powershell
+   -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+   ```
 
 ---
 
 ### 🧪 Tests Run
 
-#### Test 1: T1136.001 – Create Local Account (NewLocalUser)
+**T1136.001 – Create Local Account**  
+```powershell
+Invoke-AtomicTest T1136.001 -TestNumbers 9 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+```
 
-Simulates an attacker creating and adding a new account to the Administrators group.  
+**T1059.001 – PowerShell Encoded Command**  
+```powershell
+Invoke-AtomicTest T1059.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+```
 
-       Invoke-AtomicTest T1136.001 -TestNumbers 9 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+**T1547.001 – Registry Run Key Persistence**  
+```powershell
+Invoke-AtomicTest T1547.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+```
 
-**Observed behavior:**  
-- User `NewLocalUser` created, added to Administrators, then deleted (per script).  
-
-**Expected logs:**  
-- **Security 4720** (user account created)  
-- **Security 4732** (added to Administrators group)  
-- **Security 4726** (user account deleted)  
-- **Sysmon Event ID 1 / Security 4688** showing `net.exe` and `powershell.exe` process creation  
-
----
-
-#### Test 2: T1059.001 – PowerShell Encoded Command
-
-Simulates obfuscated PowerShell via `-enc`.  
-
-       Invoke-AtomicTest T1059.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
-
-**Expected logs:**  
-- **Sysmon Event ID 1 (process creation)** → `powershell.exe -enc …`  
-
----
-
-#### Test 3: T1547.001 – Registry Run Key Persistence
-
-Simulates persistence through `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.  
-
-       Invoke-AtomicTest T1547.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
-
-**Expected logs:**  
-- **Sysmon Event ID 13 (registry modification)** → Run key update  
-
----
-
-#### Test 4: T1105 – Ingress Tool Transfer
-
-Simulates downloading a file from the internet.  
-
-       Invoke-AtomicTest T1105 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
-
-**Expected logs:**  
-- **Sysmon Event ID 11 (file created)** for dropped file  
-- **Sysmon Event ID 3 (network connection)** for outbound request  
+**T1105 – Ingress Tool Transfer**  
+```powershell
+Invoke-AtomicTest T1105 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics"
+```
 
 ---
 
 ### 🧹 Cleanup
 
-To remove persistence artifacts or test accounts after running:
+```powershell
+Invoke-AtomicTest T1547.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -Cleanup
+Invoke-AtomicTest T1136.001 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -Cleanup
+```
 
-       # Example cleanup for the registry test
-       Invoke-AtomicTest T1547.001 -TestNumbers 1 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -Cleanup
-
-       # Generic cleanup (user accounts, files, registry keys) for T1136.001
-       Invoke-AtomicTest T1136.001 -PathToAtomicsFolder "C:\AtomicRedTeam\atomics" -Cleanup
-
----
-
-✅ With the fixes during installation and configuration, ART tests ran correctly and produced the expected telemetry for Splunk/Sysmon validation.  
+✅ With fixes during setup, ART tests ran correctly and produced the expected telemetry for Splunk/Sysmon validation.  
 
 ---
 
 ### 📊 Splunk Detection Queries
 
-To validate these tests, I pivoted into Splunk with SPL searches aligned to each scenario:
-
 **Encoded PowerShell (T1059.001):**
 
-    index=endpoint EventCode=1 Image="*\\powershell.exe" CommandLine="*-enc*"
-    | table _time, host, User, CommandLine
+```spl
+index=endpoint EventCode=1 Image="*\\powershell.exe" CommandLine="*-enc*"
+| table _time, host, User, CommandLine
+```
 
 **Registry persistence (T1547.001):**
 
-    index=endpoint EventCode=13
-    | regex TargetObject="(?i)\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
-    | table _time, host, TargetObject, Details
+```spl
+index=endpoint EventCode=13
+| regex TargetObject="(?i)\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+| table _time, host, TargetObject, Details
+```
 
 **File drop + network connection (T1105):**
 
-    index=endpoint (EventCode=11 OR EventCode=3)
-    | table _time, host, EventCode, Image, CommandLine, TargetFilename, DestinationIp, DestinationPort
+```spl
+index=endpoint (EventCode=11 OR EventCode=3)
+| table _time, host, EventCode, Image, CommandLine, TargetFilename, DestinationIp, DestinationPort
+```
 
 ---
 
 ### 🧠 Key Takeaways
 
 Part 5 transformed the lab from *log collection* to a true **defender feedback loop**:  
-1. I simulated real-world adversary behavior (brute force, obfuscated PowerShell, persistence, and tool transfer).  
+1. I simulated adversary behavior (brute force, obfuscated PowerShell, persistence, file transfer).  
 2. My Sysmon + Splunk pipeline captured the artifacts.  
 3. Custom SPL queries surfaced those behaviors clearly in dashboards and alerts.  
 
@@ -396,40 +447,4 @@ This gave me confidence that if a similar attack played out in production, the r
 
 ### 📌 MITRE ATT&CK Mapping
 
-| Technique ID | Name                               | Category          | Test Description                              |
-|--------------|------------------------------------|-------------------|-----------------------------------------------|
-| **T1110**    | Brute Force                        | Credential Access | Kali Crowbar/Hydra attacks against RDP & SMB  |
-| **T1059.001**| PowerShell (Encoded Command)       | Execution         | Encoded PowerShell to obfuscate commands      |
-| **T1547.001**| Registry Run Keys / Startup Folder | Persistence       | Registry modification for logon persistence   |
-| **T1105**    | Ingress Tool Transfer              | Command & Control | Downloading tools/files from remote sources   |
-| **T1136.001**| Create Account: Local Account      | Persistence       | Adding a new local user account for persistence |
-
----
-
-# 📊 Deliverables
-
-By the end of this lab, I had:
-- A functional AD domain (`lab.local`).  
-- Sysmon + Splunk UF sending telemetry to Splunk.  
-- SPL queries that detect brute force, encoded PowerShell, persistence, and file drops.  
-- A Splunk dashboard with real attack telemetry.  
-- Documented adversary simulations with Atomic Red Team.  
-
----
-
-# ✅ Progress Checklist
-
-- [x] VMs created (Server, Client, Splunk, Kali).  
-- [x] AD configured (domain, users, GPOs).  
-- [x] Sysmon + UF deployed.  
-- [x] Splunk index created and logs verified.  
-- [x] Core SPL queries tested.  
-- [x] Dashboard panels built.  
-- [x] Brute force attack executed + detected.  
-- [x] Atomic Red Team installed and tests executed.  
-- [x] Matching detections verified in Splunk.  
-- [x] Results documented.  
-
----
-
-_Report generated by Peter Van Rossum, September 2025_
+| Technique ID | Name                               | Category         
