@@ -176,8 +176,23 @@ The UF forwards logs from Windows hosts into Splunk for indexing and search.
      msiexec.exe /i splunkforwarder.msi AGREETOLICENSE=Yes RECEIVING_INDEXER="192.168.50.3:9997" /quiet
      ```
    - Replace `192.168.50.3` with your Splunk indexer IP and `9997` with your listener port.
+     
+    **OR**
+   
+   - Run the MSI installer and follow the GUI prompts:
+     - Accept the license agreement.  
+     - Choose installation folder (default is `C:\Program Files\SplunkUniversalForwarder`).  
+     - When prompted, enter the **Splunk indexer IP** (`192.168.50.3`) and **receiving port** (`9997`).  
+     - Choose **Local System account** for the Splunk Forwarder service (default, fine for a lab).  
+     - Complete the wizard and finish installation.  
+   - After install, verify the **SplunkForwarder** service is running via `services.msc`.
+
 
 2. **Configure inputs.conf**
+
+⚠️ **Important:** Always edit `inputs.conf` in the **local** folder (`C:\Program Files\SplunkUniversalForwarder\etc\system\local\`) — **not** the default folder (`C:\Program Files\SplunkUniversalForwarder\etc\system\default\`).  
+Splunk upgrades overwrite files in `default`, but anything in `local` is preserved as your customization.
+
    - Location:  
      `C:\Program Files\SplunkUniversalForwarder\etc\system\local\inputs.conf`
    - Configuration:
@@ -205,13 +220,13 @@ The UF forwards logs from Windows hosts into Splunk for indexing and search.
      - `index = endpoint` ensures logs land in the correct index.
      - `renderXml = true` forwards detailed XML fields from Sysmon.
 
-3. **Restart UF Service**
+4. **Restart UF Service**
    ```powershell
    net stop SplunkForwarder
    net start SplunkForwarder
    ```
 
-4. **Verify Forwarding**
+5. **Verify Forwarding**
    - On the Splunk indexer:
      ```spl
      index=endpoint host=WIN10-CLIENT OR host=DC01
