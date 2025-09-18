@@ -165,7 +165,7 @@ Sysmon (System Monitor) captures detailed endpoint telemetry beyond native logs.
 
 ---
 
-⚠️### Splunk Add-on for Sysmon (Normalization Layer)
+### ⚠️Splunk Add-on for Sysmon (Normalization Layer)
 
 Raw Sysmon logs are verbose and hard to query directly. The **Splunk Add-on for Sysmon** normalizes these logs into usable fields such as `CommandLine`, `Image`, `ParentImage`, and `DestinationIp`, making hunting and detection rules far more effective.
 
