@@ -174,23 +174,20 @@ Raw Sysmon logs are verbose and hard to query directly. The **Splunk Add-on for 
    - Go to **Apps → Manage Apps → Install App from File**
    - Upload the package (`splunk-add-on-for-sysmon_xxx.tgz`)
    - Check **Upgrade app** if updating
-2. Restart Splunk:
-    
-        sudo /opt/splunk/bin/splunk restart
-
-3. Verify by searching:
-    
-        index=endpoint sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
-
+     
    You should now see normalized fields (e.g., `CommandLine`) in the sidebar.
 
-#### Where This Fits
-Place this section in **Part 3 – Active Directory & Telemetry**, right after *Sysmon Deployment* and before *Splunk Universal Forwarder*.  
-
-This ensures the flow is:
-1. Install Sysmon (SwiftOnSecurity config)  
-2. **Normalize with Splunk Add-on for Sysmon**  
-3. Configure Universal Forwarder inputs  
+2. This will allow you to select SOC related fields that were not previously avaailable, such as:
+  - host → the machine that generated the log (critical for scoping incidents).
+  - EventCode → the Windows event ID (tells you what happened).
+  - user (or Account_Name) → the account tied to the event.
+  - src → source IP (attacker or client).
+  - dest → destination IP (target system).
+  - src_port → source port (useful in network/connection analysis).
+  - dest_port → destination port (critical for protocol/attack type).
+  - process_id → unique ID for the process (correlates parent/child).
+  - Image (or process_name) → the executable being run (e.g., powershell.exe).
+  - CommandLine → the exact command arguments (goldmine for detecting malicious behavior).
 
 ---
 
