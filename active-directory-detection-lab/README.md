@@ -165,6 +165,35 @@ Sysmon (System Monitor) captures detailed endpoint telemetry beyond native logs.
 
 ---
 
+⚠️### Splunk Add-on for Sysmon (Normalization Layer)
+
+Raw Sysmon logs are verbose and hard to query directly. The **Splunk Add-on for Sysmon** normalizes these logs into usable fields such as `CommandLine`, `Image`, `ParentImage`, and `DestinationIp`, making hunting and detection rules far more effective.
+
+#### Install & Verify
+1. In the Splunk Web UI:
+   - Go to **Apps → Manage Apps → Install App from File**
+   - Upload the package (`splunk-add-on-for-sysmon_xxx.tgz`)
+   - Check **Upgrade app** if updating
+2. Restart Splunk:
+    
+        sudo /opt/splunk/bin/splunk restart
+
+3. Verify by searching:
+    
+        index=endpoint sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+
+   You should now see normalized fields (e.g., `CommandLine`) in the sidebar.
+
+#### Where This Fits
+Place this section in **Part 3 – Active Directory & Telemetry**, right after *Sysmon Deployment* and before *Splunk Universal Forwarder*.  
+
+This ensures the flow is:
+1. Install Sysmon (SwiftOnSecurity config)  
+2. **Normalize with Splunk Add-on for Sysmon**  
+3. Configure Universal Forwarder inputs  
+
+---
+
 ### 📡 Splunk Universal Forwarder (UF)
 
 The UF forwards logs from Windows hosts into Splunk for indexing and search.
