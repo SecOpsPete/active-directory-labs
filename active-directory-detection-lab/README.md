@@ -312,7 +312,7 @@ Expected sources included: `WinEventLog:Security`, `WinEventLog:System`, `WinEve
 
 ---
 
-### Core SPL Queries
+### Core SPL Queries (Search Processing Language, the query language used in Splunk)
 *(These come from common SOC playbooks, not directly from MyDFIR — they extend the lab into detection engineering.)*
 
 **Failed logons by user/IP:**
