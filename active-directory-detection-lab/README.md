@@ -485,7 +485,8 @@ Part 5 transformed the lab from *log collection* to a true **defender feedback l
 This gave me confidence that if a similar attack played out in production, the right telemetry and detection logic would be there to catch it.
 
 ---
+## 📌 Author
 
-### 📌 MITRE ATT&CK Mapping
-
-| Technique ID | Name                               | Category         
+**Peter Van Rossum**  
+🔗 [LinkedIn](https://www.linkedin.com/in/vanr)  
+💻 [GitHub](https://github.com/SecOpsPete)  
