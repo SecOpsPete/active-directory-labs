@@ -9,18 +9,6 @@
 
 ---
 
-## ⚠️ Limitations & Considerations
-
-This lab is a **controlled, isolated environment** I built for training. While the setup mirrors many real-world enterprise components, there are important considerations:
-
-- Configurations are sometimes intentionally insecure (e.g., weak passwords, open RDP) to simulate adversary actions.  
-- All attacks are conducted against my own lab systems using a NAT/Host-Only virtual network.  
-- Telemetry will not perfectly match enterprise-scale environments but is close enough for learning SOC workflows.  
-
-The purpose is not production hardening, but **hands-on experience with detection engineering**.
-
----
-
 ## 🎯 Objective
 
 My goal was to create a **mini-enterprise Active Directory environment** where I could:
